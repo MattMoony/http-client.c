@@ -82,7 +82,6 @@ char *path_from_url(char* url) {
     int i = startIndex;
     while (url[i] != '/' && url[i++] != '\0') {}
 
-
     if (i >= strlen(url)) {
         char *path = malloc(sizeof(char)*2);
         path[0] = '/';
@@ -108,7 +107,6 @@ char **parseURL(char* url) {
         return 1;
 
     char** ret = malloc(2*sizeof(char*));
-    char* asdf = host_from_url(url);
     ret[0] = host_from_url(url);
     ret[1] = path_from_url(url);
 
@@ -148,18 +146,84 @@ SOCKET createSocket(WSADATA* wsaData, char remote_host_name[]) {
 
     return s;
 }
-void echo(char* some) {
-    puts(some);
+
+char* createHTTPRequest(char* method, char* hostname, char* path) {
+    char* req = malloc(sizeof(char));
+    req[0] = '\0';
+
+    strcpy(req, method);
+    strcat(req, " ");
+    strcat(req, path);
+    strcat(req, " ");
+    strcat(req, "HTTP/1.1\r\nHost: ");
+    strcat(req, hostname);
+    strcat(req, "\r\nUser-Agent: CClient\r\n\r\n");
+
+    return req;
 }
 
 char* get(char* url) {
+    // -- GET HOSTNAME & PATH -- //
     char** remoteURLParts = parseURL(url);
 
-    printf("%s - %s\n", remoteURLParts[0], remoteURLParts[1]);
-    printf("%s - %s\n", parseURL(url)[0], parseURL(url)[1]);
-
     WSADATA wsaData;
-    SOCKET s = createSocket(&wsaData, parseURL(url)[0]);
+    SOCKET s = createSocket(&wsaData, remoteURLParts[0]);
 
-    printf("connected!\n");
+    char *resp = malloc(sizeof(char)), *request = createHTTPRequest("GET", remoteURLParts[0], remoteURLParts[1]);
+    int recvBuffLen = 2048,
+            totalLength = 0;
+    char recvBuff[recvBuffLen];
+
+    resp[0] = '\0';
+
+    int iResult = send(s, request, (int) strlen(request), 0);
+    if (iResult == SOCKET_ERROR) {
+        printf("Send failed: %d\n", WSAGetLastError());
+
+        closesocket(s);
+        WSACleanup();
+        return "";
+    }
+
+    do {
+        iResult = recv(s, recvBuff, recvBuffLen, 0);
+
+        if (iResult > 0) {
+            totalLength += (int) iResult;
+            printf("Bytes received: %d\n", iResult);
+            strcat(resp, recvBuff);
+        } else if (iResult == 0) {
+            break;
+        } else {
+            // printf("Recv failed: %d\n", WSAGetLastError());
+            break;
+        }
+    } while (iResult > 0);
+
+    int bodyStart = -1;
+    for (int i = 0; i < totalLength-4; i++) {
+        if (resp[i] == '\r'
+                && resp[i+1] == '\n'
+                && resp[i+2] == '\r'
+                && resp[i+3] == '\n') {
+            bodyStart = i+4;
+            break;
+        }
+    }
+
+    if (bodyStart < 0) {
+        printf("ERROR: NO BODY!");
+        return "";
+    }
+
+    int x = -1;
+    while (resp[++x]!='\0') {}
+
+    char body[totalLength-bodyStart+1];
+    for (int i = bodyStart; i < totalLength; i++) {
+        body[i-bodyStart] = resp[i];
+    }
+    body[totalLength-bodyStart] = '\0';
+
+    printf("%s\n", body);
 }

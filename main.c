@@ -3,7 +3,7 @@
 
 int main()
 {
-    get("https://google.com");
+    get("http://buddahkeks.tk/");
 
     return 0;
 }
