@@ -1,7 +1,16 @@
 #include <winsock2.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+
+#include "http-client.h"
+#include "libs/propaganda.h"
+
+/**
+ * @brief   The "ip_from_hostname" function resolves a given
+ *          hostname to an IP-Address.
+ * @param   (char*) host_name: The hostname
+ * @return  (char*) the IP Address
+ */
 
 char* ip_from_hostname(char* host_name) {
     WSADATA wsaData;
@@ -27,8 +36,15 @@ char* ip_from_hostname(char* host_name) {
     return inet_ntoa(addr);
 }
 
+/**
+ * @brief   The "host_from_url" function gets the hostname from
+ *          the specified URL.
+ * @param   (char*) url: the URL
+ * @return  (char*) the hostname
+ */
+
 char *host_from_url(char* url) {
-    if (strlen(url) < 7)
+    if (pstrlen(url) < 7)
         return 1;
 
     char prefix[8];
@@ -60,9 +76,16 @@ char *host_from_url(char* url) {
     return host_name;
 }
 
+/**
+ * @brief   The "path_from_url" function gets the path
+ *          of a URL.
+ * @param   (char*) url: the URL
+ * @return  (char*) the path
+ */
+
 char *path_from_url(char* url) {
     int startIndex;
-    if (strlen(url) < 7)
+    if (pstrlen(url) < 7)
         return 1;
 
     char prefix[8];
@@ -82,7 +105,7 @@ char *path_from_url(char* url) {
     int i = startIndex;
     while (url[i] != '/' && url[i++] != '\0') {}
 
-    if (i >= strlen(url)) {
+    if (i >= pstrlen(url)) {
         char *path = malloc(sizeof(char)*2);
         path[0] = '/';
         path[1] = '\0';
@@ -90,20 +113,24 @@ char *path_from_url(char* url) {
         return path;
     } else {
         startIndex = i;
-        char *path = malloc(sizeof(char)*(strlen(url)-startIndex+1));
+        char *path = malloc(sizeof(char)*(pstrlen(url)-startIndex+1));
 
         for (i; url[i] != '\0'; i++)
             path[i-startIndex] = url[i];
-        path[strlen(url)-startIndex] = '\0';
+        path[pstrlen(url)-startIndex] = '\0';
 
         return path;
     }
 }
 
-
+/**
+ * @brief   Returns both hostname and path of a given URL.
+ * @param   (char*) url: the URL
+ * @return  (char**) [hostname, path]
+ */
 
 char **parseURL(char* url) {
-    if (strlen(url) < 7)
+    if (pstrlen(url) < 7)
         return 1;
 
     char** ret = malloc(2*sizeof(char*));
@@ -112,6 +139,13 @@ char **parseURL(char* url) {
 
     return ret;
 }
+
+/**
+ * @brief   The function "createSocket" creates a winsocket.
+ * @param   (WSADATA*) wsaData: The WSADATA reference
+ * @param   (char[]) remote_host_name: the remote host's name
+ * @return  (SOCKET) the created win-socket
+ */
 
 SOCKET createSocket(WSADATA* wsaData, char remote_host_name[]) {
     SOCKET s;
@@ -147,36 +181,68 @@ SOCKET createSocket(WSADATA* wsaData, char remote_host_name[]) {
     return s;
 }
 
-char* createHTTPRequest(char* method, char* hostname, char* path) {
-    char* req = malloc(sizeof(char));
-    req[0] = '\0';
+/**
+ * @brief   Creates a default HTTPRequest with the given parameters.
+ * @param   (char*)   method: "GET", "POST", "DELETE", ...
+ * @param   (char*) hostname: The target's hostname
+ * @param   (char*)     path: The target path
+ * @return  (char*) the created HTTPRequest
+ */
 
-    strcpy(req, method);
-    strcat(req, " ");
-    strcat(req, path);
-    strcat(req, " ");
-    strcat(req, "HTTP/1.1\r\nHost: ");
-    strcat(req, hostname);
-    strcat(req, "\r\nUser-Agent: CClient\r\n\r\n");
+char* createHTTPRequest(char* method, char* hostname, char* path) {
+    char* req = newstr(pstrcat(method, " "));
+
+    req = pstrcat(req, pstrcat(path, " "));
+    req = pstrcat(req, "HTTP/1.1\r\n");
+    req = pstrcat(req, pstrcat("Host: ", hostname));
+    req = pstrcat(req, "\r\nUser-Agent: CClient\r\n\r\n");
 
     return req;
 }
 
-char* get(char* url) {
+/**
+ * @brief   Creates a default response.
+ * @return  (struct HTTPResponse*) the default response
+ */
+
+struct HTTPResponse* defaultResponse() {
+    struct HTTPResponse* res = (struct HTTPResponse*) malloc(sizeof(struct HTTPResponse));
+    res->code = 404;
+
+    res->accessControlAllowOrigin = "";
+    res->age = 0;
+    res->connection = "";
+    res->contentType = "text/plain";
+    res->cookieAmount = 0;
+    res->cookies = NULL;
+    res->transferEncoding = "identity";
+
+    res->body = newstr("");
+
+    return res;
+}
+
+/**
+ * @brief   The "get" function makes an HTTPRequest to
+ *          the given host, and requests the given path.
+ * @param   (char*) url: the wanted URL
+ * @return  (struct HTTPResponse*) the host's response
+ */
+
+struct HTTPResponse* get(char* url) {
     // -- GET HOSTNAME & PATH -- //
     char** remoteURLParts = parseURL(url);
 
     WSADATA wsaData;
     SOCKET s = createSocket(&wsaData, remoteURLParts[0]);
 
-    char *resp = malloc(sizeof(char)), *request = createHTTPRequest("GET", remoteURLParts[0], remoteURLParts[1]);
-    int recvBuffLen = 2048,
+    char *resp = newstr(""),
+            *request = createHTTPRequest("GET", remoteURLParts[0], remoteURLParts[1]);
+    int recvBuffLen = 64,
             totalLength = 0;
     char recvBuff[recvBuffLen];
 
-    resp[0] = '\0';
-
-    int iResult = send(s, request, (int) strlen(request), 0);
+    int iResult = send(s, request, (int) pstrlen(request), 0);
     if (iResult == SOCKET_ERROR) {
         printf("Send failed: %d\n", WSAGetLastError());
 
@@ -190,40 +256,53 @@ char* get(char* url) {
 
         if (iResult > 0) {
             totalLength += (int) iResult;
-            printf("Bytes received: %d\n", iResult);
-            strcat(resp, recvBuff);
+            // printf("Bytes received: %d\n", iResult);
+            resp = pstrcat(resp, recvBuff);
+
+            if (stringOccurrence(resp, "\r\n\r\n") > 0) {
+                break;
+            }
         } else if (iResult == 0) {
             break;
         } else {
-            // printf("Recv failed: %d\n", WSAGetLastError());
+            printf("Recv failed: %d\n", WSAGetLastError());
             break;
         }
     } while (iResult > 0);
 
-    int bodyStart = -1;
-    for (int i = 0; i < totalLength-4; i++) {
-        if (resp[i] == '\r'
-                && resp[i+1] == '\n'
-                && resp[i+2] == '\r'
-                && resp[i+3] == '\n') {
-            bodyStart = i+4;
-            break;
+    int header_end_i = indexOfString(resp, "\r\n\r\n");
+
+    char* f_recv_part = substr(resp, header_end_i+5);
+    char* f_header = substring(resp, 0, header_end_i);
+
+    char** h_parts = splits(f_header, "\r\n");
+    int h_p_amount = stringOccurrence(f_header, "\r\n");
+
+    struct HTTPResponse* httpRes;
+    httpRes = (struct HTTPResponse*) malloc(sizeof(struct HTTPResponse));
+    char* cookies = newstr("");
+
+    // Skip first header line ("HTTP/1.1 200 OK", etc.)
+    for (int i = 0; i < h_p_amount+1; i++) {
+        char** l_part = split(h_parts[i], ' ');
+        char* h_name = substring(l_part[0], 0, strlen(l_part[0])-1);
+
+        if (strlen(h_name) >= 5 && strequals("HTTP/", substring(l_part[0], 0, 5))) {
+            httpRes->code = stoi(l_part[1]);
+        } else if (strequals(h_name, "Content-Type")) {
+            httpRes->contentType = l_part[1];
+            replace(httpRes->contentType, ';', '\0');
+        } else if (strequals(h_name, "Transfer-Encoding")) {
+            httpRes->transferEncoding = l_part[1];
+        } else if (strequals(h_name, "Set-Cookie")) {
+            cookies = strcat(cookies, strcat(l_part[1], " "));
         }
     }
 
-    if (bodyStart < 0) {
-        printf("ERROR: NO BODY!");
-        return "";
-    }
+    httpRes->cookieAmount = charOccurrence(cookies, ' ')+1;
+    httpRes->cookies = split(cookies, ' ');
 
-    int x = -1;
-    while (resp[++x]!='\0') {}
 
-    char body[totalLength-bodyStart+1];
-    for (int i = bodyStart; i < totalLength; i++) {
-        body[i-bodyStart] = resp[i];
-    }
-    body[totalLength-bodyStart] = '\0';
 
-    printf("%s\n", body);
+    return httpRes;
 }

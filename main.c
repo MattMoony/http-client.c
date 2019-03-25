@@ -3,7 +3,15 @@
 
 int main()
 {
-    get("http://buddahkeks.tk/");
+    struct HTTPResponse* res;
+    res = get("http://www.google.com");
+
+    printf("HTTPResponse: ");
+    printf("%d\n", res->code);
+    printf("%s\n", res->contentType);
+    printf("%s\n", res->transferEncoding);
+    printf("%d\n", res->cookieAmount);
+    printf("%s\n", res->cookies[0]);
 
     return 0;
 }
